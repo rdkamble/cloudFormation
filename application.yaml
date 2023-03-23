@@ -1,0 +1,53 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Cloudformation template to create a Application Server'
+
+Parameters:
+
+  InstType:
+   Type: String
+   Default: t2.small
+
+  keyName:
+    Type: String
+
+  amiId:
+   Type: String
+   Default: 'ami-0557a15b87f6559cf'
+
+Resources:
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow SSH Communication to the owaspzap host
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 8085
+        ToPort: 8085
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: 22
+        ToPort: 22
+        CidrIp: 0.0.0.0/0
+
+  owaspZapInstance:
+    Type: AWS::EC2::Instance
+    DependsOn: SecurityGroup
+    Properties:
+      ImageId: !Ref amiId
+      InstanceType: !Ref InstType
+      KeyName: !Ref keyName
+      SecurityGroupIds: 
+        - !GetAtt SecurityGroup.GroupId
+      Tags: 
+      - Key: "Name"
+        Value: "ApplicationServer"
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash -xe
+          sudo apt-get update
+          

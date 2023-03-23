@@ -1,0 +1,75 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Cloudformation template to create a sonarqube Server'
+
+Parameters:
+
+  InstType:
+   Type: String
+   Default: t2.medium
+
+  keyName:
+    Type: String
+
+  amiId:
+   Type: String
+   Default: 'ami-0557a15b87f6559cf'
+
+Resources:
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow SSH Communication and port 9000 to the SonarQube host
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 9000
+        ToPort: 9000
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: 22
+        ToPort: 22
+        CidrIp: 0.0.0.0/0
+
+  SonarQubeInstance:
+    Type: AWS::EC2::Instance
+    DependsOn: SecurityGroup
+    Properties:
+      ImageId: !Ref amiId
+      InstanceType: !Ref InstType
+      KeyName: !Ref keyName
+      SecurityGroupIds: 
+        - !GetAtt SecurityGroup.GroupId
+      Tags: 
+      - Key: "Name"
+        Value: "SonarQubeServer"
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash -xe
+          sudo apt install ca-certificates
+          echo 'vm.max_map_count=262144' | sudo tee -a /etc/sysctl.conf
+          echo 'fs.file-max=65536' | sudo tee -a /etc/sysctl.conf
+          sudo sysctl -p
+          echo 'root   -   nofile   65536' | sudo tee -a /etc/security/limits.d/99-sonarqube.conf
+          echo 'root   -   nproc    7610' | sudo tee -a /etc/security/limits.d/99-sonarqube.conf
+          sudo apt-get update
+          sudo apt-get install docker.io -y
+          sudo docker pull sonarqube
+          sudo docker images
+          sudo docker volume create sonarqube-conf 
+          sudo docker volume create sonarqube-data
+          sudo docker volume create sonarqube-logs
+          sudo docker volume create sonarqube-extensions
+          sudo docker run -d --name sonarqube -p 9000:9000 -p 9092:9092 -v sonarqube-conf:/opt/sonarqube/conf -v sonarqube-data:/opt/sonarqube/data -v sonarqube-logs:/opt/sonarqube/logs -v sonarqube-extensions:/opt/sonarqube/extensions sonarqube
+          sudo docker container start sonarqube
+
+Outputs:
+  SonarQubeServerURL:
+    Description: URL of SonarQube Server
+    Value: !Sub
+      - http://${publicip}:9000/
+      - { publicip: !GetAtt SonarQubeInstance.PublicIp } 
+

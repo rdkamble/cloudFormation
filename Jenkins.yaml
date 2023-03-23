@@ -1,0 +1,70 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Cloudformation template to create a Jenkins Server'
+
+Parameters:
+
+  InstType:
+   Type: String
+   Default: t2.medium
+
+  keyName:
+    Type: String
+
+  amiId:
+   Type: String
+   Default: 'ami-0557a15b87f6559cf'
+
+Resources:
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow SSH Communication and port 8080 to the Jenkins host
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 8080
+        ToPort: 8080
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: 22
+        ToPort: 22
+        CidrIp: 0.0.0.0/0
+
+  JenkinsInstance:
+    Type: AWS::EC2::Instance
+    DependsOn: SecurityGroup
+    Properties:
+      ImageId: !Ref amiId
+      InstanceType: !Ref InstType
+      KeyName: !Ref keyName
+      SecurityGroupIds: 
+        - !GetAtt SecurityGroup.GroupId
+      Tags: 
+      - Key: "Name"
+        Value: "JenkinsServer"
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash -xe
+          sudo apt-get update
+          sudo apt install openjdk-11-jdk -y 
+          sudo wget -q -O - https://pkg.jenkins.io/debian-stable/jenkins.io.key |sudo gpg --dearmor -o /usr/share/keyrings/jenkins.gpg
+          sudo sh -c 'echo deb [signed-by=/usr/share/keyrings/jenkins.gpg] http://pkg.jenkins.io/debian-stable binary/ > /etc/apt/sources.list.d/jenkins.list'
+          sudo apt install ca-certificates
+          sudo apt update
+          sudo apt-get install jenkins -y 
+          sudo systemctl start jenkins.service 
+          sudo apt update
+          sudo apt-get install -y maven
+          sudo apt-get install -y git-secret
+          sudo apt-get install -y python3-pip
+          pip3 install -y truffleHog3
+          #To get the Jenkins initialAdminPassword
+          sudo cp /var/lib/jenkins/secrets/initialAdminPassword /home/ubuntu/
+          sudo chmod 777 /home/ubuntu/initialAdminPassword
+
+Outputs:
+  JenkinsServerURL:
+    Description: URL of Jenkins Server
+    Value: !Sub
+      - http://${publicip}:8080/
+      - { publicip: !GetAtt JenkinsInstance.PublicIp } 
